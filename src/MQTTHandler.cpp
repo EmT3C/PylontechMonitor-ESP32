@@ -280,6 +280,34 @@ void MQTTHandler::publishDiscovery() {
   pub_cfg("sys_rec_dsg_voltage", "System Recommend Discharge Voltage", String(MQTT_TOPIC_ROOT) + "sys_rec_dsg_voltage", "V", "voltage");
   pub_cfg("sys_rec_chg_current", "System Recommend Charge Current", String(MQTT_TOPIC_ROOT) + "sys_rec_chg_current", "A",  "current");
   pub_cfg("sys_rec_dsg_current", "System Recommend Discharge Current", String(MQTT_TOPIC_ROOT) + "sys_rec_dsg_current", "A", "current");
+
+  pub_cfg("diag_reset_reason", "Diag Reset Reason", String(MQTT_TOPIC_ROOT) + "diag/reset_reason", nullptr, nullptr, false, "diagnostic", "mdi:restart-alert");
+  pub_cfg("diag_saved_phase", "Diag Saved Phase", String(MQTT_TOPIC_ROOT) + "diag/saved_phase", nullptr, nullptr, false, "diagnostic", "mdi:map-marker-alert");
+  pub_cfg("diag_rtc_phase", "Diag RTC Phase", String(MQTT_TOPIC_ROOT) + "diag/rtc_phase", nullptr, nullptr, false, "diagnostic", "mdi:map-marker-radius");
+  pub_cfg("diag_boot_count", "Diag Boot Count", String(MQTT_TOPIC_ROOT) + "diag/boot_count", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_abnormal_resets", "Diag Abnormal Resets", String(MQTT_TOPIC_ROOT) + "diag/abnormal_resets", nullptr, nullptr, false, "diagnostic", "mdi:alert");
+  pub_cfg("diag_free_heap", "Diag Free Heap", String(MQTT_TOPIC_ROOT) + "diag/free_heap", "B", nullptr, true, "diagnostic", "mdi:memory");
+  pub_cfg("diag_min_free_heap", "Diag Min Free Heap", String(MQTT_TOPIC_ROOT) + "diag/min_free_heap", "B", nullptr, true, "diagnostic", "mdi:memory");
+  pub_cfg("diag_uptime_ms", "Diag Uptime", String(MQTT_TOPIC_ROOT) + "diag/uptime_ms", "ms", "duration", true, "diagnostic", "mdi:timer-outline");
+  pub_cfg("diag_wifi_rssi", "Diag WiFi RSSI", String(MQTT_TOPIC_ROOT) + "diag/wifi_rssi", "dBm", "signal_strength", true, "diagnostic", "mdi:wifi-strength-2");
+  pub_cfg("diag_loop_counter", "Diag Loop Counter", String(MQTT_TOPIC_ROOT) + "diag/loop_counter", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_last_event", "Diag Last Event", String(MQTT_TOPIC_ROOT) + "diag/last_event", nullptr, nullptr, false, "diagnostic", "mdi:message-alert-outline");
+  pub_cfg("diag_last_command", "Diag Last Command", String(MQTT_TOPIC_ROOT) + "diag/last_command", nullptr, nullptr, false, "diagnostic", "mdi:console");
+  pub_cfg("diag_last_error", "Diag Current Error", String(MQTT_TOPIC_ROOT) + "diag/last_error", nullptr, nullptr, false, "diagnostic", "mdi:alert-circle-outline");
+  pub_cfg("diag_last_failure_command", "Diag Last Failure Command", String(MQTT_TOPIC_ROOT) + "diag/last_failure_command", nullptr, nullptr, false, "diagnostic", "mdi:console-line");
+  pub_cfg("diag_last_failure_error", "Diag Last Failure Error", String(MQTT_TOPIC_ROOT) + "diag/last_failure_error", nullptr, nullptr, false, "diagnostic", "mdi:alert-octagon-outline");
+  pub_cfg("diag_last_failure_rx_len", "Diag Last Failure RX Length", String(MQTT_TOPIC_ROOT) + "diag/last_failure_rx_len", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_last_failure_rx_excerpt", "Diag Last Failure RX", String(MQTT_TOPIC_ROOT) + "diag/last_failure_rx_excerpt", nullptr, nullptr, false, "diagnostic", "mdi:text-box-search-outline");
+  pub_cfg("diag_previous_alive", "Diag Previous Alive", String(MQTT_TOPIC_ROOT) + "diag/previous_alive", nullptr, nullptr, false, "diagnostic", "mdi:history");
+  pub_cfg("diag_previous_failure", "Diag Previous Failure", String(MQTT_TOPIC_ROOT) + "diag/previous_failure", nullptr, nullptr, false, "diagnostic", "mdi:history");
+  pub_cfg("diag_last_poll", "Diag Last Poll", String(MQTT_TOPIC_ROOT) + "diag/last_poll", nullptr, nullptr, false, "diagnostic", "mdi:sync");
+  pub_cfg("diag_last_poll_ms", "Diag Last Poll Duration", String(MQTT_TOPIC_ROOT) + "diag/last_poll_ms", "ms", "duration", true, "diagnostic", "mdi:timer-alert-outline");
+  pub_cfg("diag_pwr_ok", "Diag PWR OK", String(MQTT_TOPIC_ROOT) + "diag/pwr_ok", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_pwr_fail", "Diag PWR Fail", String(MQTT_TOPIC_ROOT) + "diag/pwr_fail", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_pwrsys_ok", "Diag PWRSYS OK", String(MQTT_TOPIC_ROOT) + "diag/pwrsys_ok", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_pwrsys_fail", "Diag PWRSYS Fail", String(MQTT_TOPIC_ROOT) + "diag/pwrsys_fail", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_stat_ok", "Diag STAT OK", String(MQTT_TOPIC_ROOT) + "diag/stat_ok", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_stat_fail", "Diag STAT Fail", String(MQTT_TOPIC_ROOT) + "diag/stat_fail", nullptr, nullptr, false, "diagnostic", "mdi:counter");
   {
     StaticJsonDocument<384> doc;
     doc["name"]            = "Pylontech Online";
@@ -444,7 +472,10 @@ void MQTTHandler::publishDiagnostic(const char* resetReason,
                                     uint32_t bootCount,
                                     uint32_t abnormalResetCount,
                                     uint32_t freeHeap,
-                                    uint32_t minFreeHeap) {
+                                    uint32_t minFreeHeap,
+                                    uint32_t uptimeMs,
+                                    int32_t wifiRssi,
+                                    uint32_t loopCounter) {
   if (!s_client || !s_client->connected()) return;
 
   publishRetainedText(s_client, "reset_reason", resetReason ? resetReason : "Unknown");
@@ -454,6 +485,12 @@ void MQTTHandler::publishDiagnostic(const char* resetReason,
   publishRetainedNumber(s_client, "abnormal_resets", abnormalResetCount);
   publishRetainedNumber(s_client, "free_heap", freeHeap);
   publishRetainedNumber(s_client, "min_free_heap", minFreeHeap);
+  publishRetainedNumber(s_client, "uptime_ms", uptimeMs);
+  publishRetainedNumber(s_client, "loop_counter", loopCounter);
+
+  char rssi[16];
+  snprintf(rssi, sizeof(rssi), "%ld", (long)wifiRssi);
+  publishRetainedText(s_client, "wifi_rssi", rssi);
 }
 
 void MQTTHandler::publishDiagnosticEvent(const char* eventText) {

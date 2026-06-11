@@ -1,6 +1,7 @@
 #ifndef MQTT_HANDLER_H
 #define MQTT_HANDLER_H
 
+#include <stdint.h>
 #include <PubSubClient.h>
 #include "batteryStack.h"
 
@@ -17,7 +18,10 @@ public:
                                 uint32_t bootCount,
                                 uint32_t abnormalResetCount,
                                 uint32_t freeHeap,
-                                uint32_t minFreeHeap);
+                                uint32_t minFreeHeap,
+                                uint32_t uptimeMs,
+                                int32_t wifiRssi,
+                                uint32_t loopCounter);
   static void publishDiagnosticEvent(const char* eventText);
   static void publishDiagnosticDetail(const char* key, const char* value);
 
