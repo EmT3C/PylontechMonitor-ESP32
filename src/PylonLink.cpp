@@ -1,7 +1,16 @@
 #include "PylonLink.h"
+#include "Config.h"
 #include <string.h>   // strstr, strchr
 #include <Arduino.h>  // millis, delay
 #include <ctype.h>    // tolower
+
+#ifndef PYLON_AUTO_DEBUG_LOGIN
+#define PYLON_AUTO_DEBUG_LOGIN 1
+#endif
+
+#ifndef PYLON_DEBUG_LOGIN_CMD
+#define PYLON_DEBUG_LOGIN_CMD "login debug"
+#endif
 
 static bool tokenMatchesPromptSuffix(const char* token, size_t len, const char* prompt) {
   if (!token || !prompt || len == 0) return false;
@@ -47,6 +56,29 @@ static bool responseHasPayload(const char* buf) {
 
 static bool responseIsOnlyPrompt(const char* buf) {
   return responseIsPromptOnlyLike(buf);
+}
+
+static bool responseHasDebugPrompt(const char* buf) {
+  return buf && strstr(buf, "pylon_debug>") != nullptr;
+}
+
+static bool responseHasNormalPrompt(const char* buf) {
+  return buf && strstr(buf, "pylon>") != nullptr && !responseHasDebugPrompt(buf);
+}
+
+static bool responseWantsPassword(const char* buf) {
+  if (!buf) return false;
+  const char* p = buf;
+  while (*p) {
+    if (tolower((unsigned char)p[0]) == 'p' &&
+        tolower((unsigned char)p[1]) == 'a' &&
+        tolower((unsigned char)p[2]) == 's' &&
+        tolower((unsigned char)p[3]) == 's') {
+      return true;
+    }
+    ++p;
+  }
+  return false;
 }
 
 static inline void pushWindow(char* window, size_t capacity, size_t& len, char c) {
@@ -106,6 +138,7 @@ bool BatteryLink::sendAndReceive(const char* cmd, char* outBuf, size_t bufSize, 
     outBuf[0] = '\0';
     port.flush();
     wakeUpConsole();
+    ensureDebugMode();
 
     // Rx leeren, damit nur Antwort auf DIESEN Befehl kommt
     while (port.available()) { port.read(); }
@@ -116,6 +149,11 @@ bool BatteryLink::sendAndReceive(const char* cmd, char* outBuf, size_t bufSize, 
     // Feste Poll-Kommandos sollen bis zum bekannten Prompt lesen und nicht schon
     // bei einem einzelnen '>' abbrechen, sonst bleiben nur Prompt/Leerantworten uebrig.
     const int n = readUntil(outBuf, nullptr, bufSize, timeoutMs);
+    if (responseHasDebugPrompt(outBuf)) {
+      m_debugLoggedIn = true;
+    } else if (responseHasNormalPrompt(outBuf)) {
+      m_debugLoggedIn = false;
+    }
     ok = (n > 0) && responseHasPayload(outBuf);
 
     if (!ok && responseIsOnlyPrompt(outBuf) && attempt == 0) {
@@ -139,6 +177,7 @@ bool BatteryLink::sendAndReceivePrompt(const char* cmd, char* outBuf, size_t buf
     port.flush();
 
     wakeUpConsole();
+    ensureDebugMode();
     while (port.available()) { port.read(); }
 
     if (cmd && *cmd) port.print(cmd);
@@ -146,6 +185,11 @@ bool BatteryLink::sendAndReceivePrompt(const char* cmd, char* outBuf, size_t buf
 
     // Kein fester Terminator, readUntil erkennt pylon> und pylon_debug> selbst.
     int n = readUntil(outBuf, nullptr, bufSize, timeoutMs);
+    if (responseHasDebugPrompt(outBuf)) {
+      m_debugLoggedIn = true;
+    } else if (responseHasNormalPrompt(outBuf)) {
+      m_debugLoggedIn = false;
+    }
     ok = (n > 0);
 
     if (ok && responseIsOnlyPrompt(outBuf) && attempt == 0) {
@@ -260,6 +304,53 @@ int BatteryLink::readUntil(char* buf, const char* term, size_t maxLen, unsigned 
   return (int)len;                  // ggf. teilgefüllt (bei Pufferlimit)
 }
 
+
+void BatteryLink::ensureDebugMode() {
+#if PYLON_AUTO_DEBUG_LOGIN
+  const uint32_t now = millis();
+  if (m_debugLoggedIn) return;
+  if (m_lastDebugLoginMs != 0 && (now - m_lastDebugLoginMs) < 30000UL) return;
+  m_lastDebugLoginMs = now;
+
+  char probe[192];
+  probe[0] = '\0';
+
+  port.write('\n');
+  int n = readUntil(probe, nullptr, sizeof(probe), 800);
+  if (n <= 0) return;
+
+  if (responseHasDebugPrompt(probe)) {
+    m_debugLoggedIn = true;
+    return;
+  }
+
+  if (!responseHasNormalPrompt(probe)) return;
+
+  while (port.available()) { port.read(); }
+  port.print(PYLON_DEBUG_LOGIN_CMD);
+  port.print('\n');
+
+  char loginResp[256];
+  loginResp[0] = '\0';
+  n = readUntil(loginResp, nullptr, sizeof(loginResp), 1500);
+
+#ifdef PYLON_DEBUG_PASSWORD
+  if (n > 0 && responseWantsPassword(loginResp)) {
+    while (port.available()) { port.read(); }
+    port.print(PYLON_DEBUG_PASSWORD);
+    port.print('\n');
+    loginResp[0] = '\0';
+    n = readUntil(loginResp, nullptr, sizeof(loginResp), 1500);
+  }
+#endif
+
+  if (n > 0 && responseHasDebugPrompt(loginResp)) {
+    m_debugLoggedIn = true;
+  }
+#else
+  (void)this;
+#endif
+}
 
 // Kurzer Weckversuch wie in deiner Ursprungsversion
 void BatteryLink::wakeUpConsole() {

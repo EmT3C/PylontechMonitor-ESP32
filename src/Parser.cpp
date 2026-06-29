@@ -102,9 +102,26 @@ static bool isBaseStateToken(const char* s) {
           strcmp(s, "Dischg") == 0 ||
           strcmp(s, "Idle") == 0 ||
           strcmp(s, "Balance") == 0 ||
+          strcmp(s, "Balancing") == 0 ||
           strcmp(s, "Protect") == 0 ||
           strcmp(s, "Alarm") == 0 ||
           strcmp(s, "Alarm!") == 0);
+}
+
+static bool isBalanceToken(const char* s) {
+  if (!s) return false;
+
+  char lower[16];
+  size_t i = 0;
+  for (; s[i] && i < sizeof(lower) - 1; ++i) {
+    lower[i] = (char)tolower((unsigned char)s[i]);
+  }
+  lower[i] = 0;
+
+  return strcmp(lower, "balance") == 0 ||
+         strcmp(lower, "balancing") == 0 ||
+         strcmp(lower, "bal") == 0 ||
+         strncmp(lower, "balanc", 6) == 0;
 }
 
 static bool isSubStateToken(const char* s) {
@@ -222,6 +239,13 @@ bool Parser::parsePwr(const char* in, batteryStack* out) {
     if (pct) *pct = 0;
     b.soc = atol(socBuf);
 
+    for (int i = 0; i < tokCount; ++i) {
+      if (isBalanceToken(tokens[i])) {
+        b.balancing = true;
+        break;
+      }
+    }
+
     int subStateWrite = 2;
     for (int i = socIdx - 1; i >= 0; --i) {
       if (isBaseStateToken(tokens[i])) {
@@ -246,6 +270,10 @@ bool Parser::parsePwr(const char* in, batteryStack* out) {
     for (int i = socIdx + 1; i < tokCount; ++i) {
       if (isDateToken(tokens[i]) || isTimeToken(tokens[i]) || isNum(tokens[i])) continue;
       if (strcmp(tokens[i], "-") == 0) continue;
+      if (isBalanceToken(tokens[i])) {
+        b.balancing = true;
+        continue;
+      }
       if (!isSubStateToken(tokens[i]) && !isBaseStateToken(tokens[i])) continue;
 
       if (postStateCount == 0) {
@@ -257,7 +285,7 @@ bool Parser::parsePwr(const char* in, batteryStack* out) {
       postStateCount++;
     }
 
-    b.balancing = b.isBalancing();
+    b.balancing = b.balancing || b.isBalancing();
     setBatteryAlarmText(b);
 
     presentCnt++;

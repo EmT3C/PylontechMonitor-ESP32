@@ -105,7 +105,9 @@ static void sendJsonStack() {
       nb["cellVoltHigh"]  = b.cellVoltHigh;
       nb["cellTempLow"]   = b.cellTempLow;
       nb["cellTempHigh"]  = b.cellTempHigh;
-      nb["baseState"]     = (b.baseState[0] ? b.baseState : "Unknown");
+      nb["baseState"]     = b.isBalancing() ? "Balance" : (b.baseState[0] ? b.baseState : "Unknown");
+      nb["rawBaseState"]  = (b.baseState[0] ? b.baseState : "Unknown");
+      nb["balancing"]     = b.isBalancing();
       nb["voltage_V"]     = (float)b.voltage / 1000.0f;
       nb["current_A"]     = (float)b.current / 1000.0f;
       nb["temp_c"]        = (float)b.tempr / 1000.0f;

@@ -147,12 +147,15 @@ void MQTTHandler::publishIfConnected() {
       b.isProtect()     ? "Protect" :
       b.isCharging()    ? "Charge"  :
       b.isDischarging() ? "Dischg"  :
-      b.isIdle()        ? "Idle"    :
       b.isBalancing()   ? "Balance" :
+      b.isIdle()        ? "Idle"    :
                           "Unknown";
 
     snprintf(topic, sizeof(topic), MQTT_TOPIC_ROOT "%d/state", i + 1);
     s_client->publish(topic, st, true);
+
+    snprintf(topic, sizeof(topic), MQTT_TOPIC_ROOT "%d/balancing", i + 1);
+    s_client->publish(topic, b.isBalancing() ? "ON" : "OFF", true);
 
     snprintf(topic, sizeof(topic), MQTT_TOPIC_ROOT "%d/alarm_text", i + 1);
     s_client->publish(topic, b.alarmText[0] ? b.alarmText : "Normal", true);
@@ -308,6 +311,8 @@ void MQTTHandler::publishDiscovery() {
   pub_cfg("diag_pwrsys_fail", "Diag PWRSYS Fail", String(MQTT_TOPIC_ROOT) + "diag/pwrsys_fail", nullptr, nullptr, false, "diagnostic", "mdi:counter");
   pub_cfg("diag_stat_ok", "Diag STAT OK", String(MQTT_TOPIC_ROOT) + "diag/stat_ok", nullptr, nullptr, false, "diagnostic", "mdi:counter");
   pub_cfg("diag_stat_fail", "Diag STAT Fail", String(MQTT_TOPIC_ROOT) + "diag/stat_fail", nullptr, nullptr, false, "diagnostic", "mdi:counter");
+  pub_cfg("diag_wifi_down_ms", "Diag WiFi Down", String(MQTT_TOPIC_ROOT) + "diag/wifi_down_ms", "ms", "duration", true, "diagnostic", "mdi:wifi-alert");
+  pub_cfg("diag_mqtt_down_ms", "Diag MQTT Down", String(MQTT_TOPIC_ROOT) + "diag/mqtt_down_ms", "ms", "duration", true, "diagnostic", "mdi:lan-disconnect");
   {
     StaticJsonDocument<384> doc;
     doc["name"]            = "Pylontech Online";
@@ -363,6 +368,32 @@ void MQTTHandler::publishDiscovery() {
             false,
             nullptr,
             "mdi:battery");
+
+    {
+      StaticJsonDocument<512> doc;
+      doc["name"]            = String("Battery ") + i + " Balancing";
+      doc["state_topic"]     = String(MQTT_TOPIC_ROOT) + i + "/balancing";
+      doc["unique_id"]       = node + "_" + idp + "_balancing";
+      doc["device_class"]    = "running";
+      doc["payload_on"]      = "ON";
+      doc["payload_off"]     = "OFF";
+      doc["entity_category"] = "diagnostic";
+      doc["availability_topic"]    = String(MQTT_TOPIC_ROOT) + "availability";
+      doc["payload_available"]     = "online";
+      doc["payload_not_available"] = "offline";
+
+      JsonObject dev = doc.createNestedObject("device");
+      JsonArray ids  = dev.createNestedArray("identifiers");
+      ids.add(node);
+      dev["manufacturer"] = "Pylontech";
+      dev["model"]        = "Battery Monitor";
+      dev["name"]         = node;
+
+      char payload[512];
+      size_t len = serializeJson(doc, payload, sizeof(payload));
+      String topic = String(HA_DISCOVERY_BINARY_PREFIX) + node + "/" + idp + "_balancing/config";
+      s_client->publish(topic.c_str(), (uint8_t*)payload, len, true);
+    }
   }
 }
 

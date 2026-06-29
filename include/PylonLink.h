@@ -21,9 +21,11 @@ private:
   int baud = 0;
 
   volatile bool m_busy = false;
+  bool m_debugLoggedIn = false;
+  uint32_t m_lastDebugLoginMs = 0;
   bool lock(uint32_t waitMs);
   void unlock();
   int  readUntil(char* buf, const char* term, size_t maxLen, unsigned long timeoutMs);
+  void ensureDebugMode();
   void wakeUpConsole(); // <— WICHTIG: Deklaration
 };
-

@@ -257,6 +257,89 @@ namespace CrashTrace {
   }
 }
 
+static void publishMqttDiagnosticEvent(const char* msg, bool forceSnapshot);
+bool connectToBestAP(const char* ssid, const char* pass);
+
+namespace ConnectivityGuard {
+  static unsigned long s_wifiDownSinceMs = 0;
+  static unsigned long s_mqttDownSinceMs = 0;
+  static unsigned long s_lastWifiReconnectMs = 0;
+  static unsigned long s_lastMqttResetMs = 0;
+  static bool s_wifiWasDown = false;
+  static bool s_mqttWasDown = false;
+
+  static constexpr unsigned long kBootGraceMs = 120000UL;
+  static constexpr unsigned long kWifiReconnectAfterMs = 45000UL;
+  static constexpr unsigned long kWifiReconnectIntervalMs = 60000UL;
+  static constexpr unsigned long kWifiRestartAfterMs = 600000UL;
+  static constexpr unsigned long kMqttResetAfterMs = 180000UL;
+  static constexpr unsigned long kMqttResetIntervalMs = 120000UL;
+
+  static void tick(bool wifiOK, bool mqttOK) {
+    const unsigned long now = millis();
+
+    if (wifiOK) {
+      s_wifiDownSinceMs = 0;
+      s_wifiWasDown = false;
+    } else {
+      if (s_wifiDownSinceMs == 0) {
+        s_wifiDownSinceMs = now;
+        s_wifiWasDown = true;
+      }
+
+      const unsigned long downMs = now - s_wifiDownSinceMs;
+      if (now > kBootGraceMs &&
+          downMs >= kWifiReconnectAfterMs &&
+          (s_lastWifiReconnectMs == 0 || now - s_lastWifiReconnectMs >= kWifiReconnectIntervalMs)) {
+        s_lastWifiReconnectMs = now;
+        g_log.Log("WiFi recovery: reconnecting");
+        publishMqttDiagnosticEvent("WiFi recovery: reconnecting", true);
+        WiFi.disconnect(false);
+        delay(250);
+        connectToBestAP(WIFI_SSID, WIFI_PASS);
+      }
+
+      if (now > kBootGraceMs && downMs >= kWifiRestartAfterMs) {
+        g_log.Log("WiFi recovery: restarting ESP after prolonged outage");
+        publishMqttDiagnosticEvent("WiFi recovery: restarting ESP after prolonged outage", true);
+        delay(250);
+        ESP.restart();
+      }
+    }
+
+    if (!wifiOK || mqttOK) {
+      s_mqttDownSinceMs = 0;
+      s_mqttWasDown = false;
+      return;
+    }
+
+    if (s_mqttDownSinceMs == 0) {
+      s_mqttDownSinceMs = now;
+      s_mqttWasDown = true;
+    }
+
+#if ENABLE_MQTT
+    const unsigned long mqttDownMs = now - s_mqttDownSinceMs;
+    if (now > kBootGraceMs &&
+        mqttDownMs >= kMqttResetAfterMs &&
+        (s_lastMqttResetMs == 0 || now - s_lastMqttResetMs >= kMqttResetIntervalMs)) {
+      s_lastMqttResetMs = now;
+      g_log.Log("MQTT recovery: resetting client connection");
+      publishMqttDiagnosticEvent("MQTT recovery: resetting client connection", true);
+      mqttClient.disconnect();
+    }
+#endif
+  }
+
+  static unsigned long wifiDownMs() {
+    return s_wifiWasDown && s_wifiDownSinceMs ? (millis() - s_wifiDownSinceMs) : 0UL;
+  }
+
+  static unsigned long mqttDownMs() {
+    return s_mqttWasDown && s_mqttDownSinceMs ? (millis() - s_mqttDownSinceMs) : 0UL;
+  }
+}
+
 static void publishMqttDiagnosticSnapshot(bool force = false) {
 #if ENABLE_MQTT
   static unsigned long s_lastDiagPublishMs = 0;
@@ -301,6 +384,10 @@ static void publishMqttDiagnosticSnapshot(bool force = false) {
   MQTTHandler::publishDiagnosticDetail("stat_ok", buf);
   snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_statFailCount);
   MQTTHandler::publishDiagnosticDetail("stat_fail", buf);
+  snprintf(buf, sizeof(buf), "%lu", ConnectivityGuard::wifiDownMs());
+  MQTTHandler::publishDiagnosticDetail("wifi_down_ms", buf);
+  snprintf(buf, sizeof(buf), "%lu", ConnectivityGuard::mqttDownMs());
+  MQTTHandler::publishDiagnosticDetail("mqtt_down_ms", buf);
   MQTTHandler::publishDiagnosticDetail("previous_alive", CrashTrace::previousAliveText());
   MQTTHandler::publishDiagnosticDetail("previous_failure", CrashTrace::previousFailureText());
 #else
@@ -1019,6 +1106,8 @@ void setup() {
     doc["pwrsysFail"] = g_pwrsysFailCount;
     doc["statOk"] = g_statOkCount;
     doc["statFail"] = g_statFailCount;
+    doc["wifiDownMs"] = ConnectivityGuard::wifiDownMs();
+    doc["mqttDownMs"] = ConnectivityGuard::mqttDownMs();
     doc["previousAlive"] = CrashTrace::previousAliveText();
     doc["previousFailure"] = CrashTrace::previousFailureText();
 
@@ -1096,6 +1185,8 @@ void loop() {
     }
 #endif
   }
+
+  ConnectivityGuard::tick(wifiOK, mqttOK);
 
   bool alarm = (strcmp(g_stack.baseState, "Alarm!") == 0) ||
                (strcmp(g_systemStack.alarmState, "Alarm") == 0);

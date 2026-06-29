@@ -4,7 +4,7 @@
 #include <cstring>
 
 #ifndef MAX_PYLON_BATTERIES
-#define MAX_PYLON_BATTERIES 6
+#define MAX_PYLON_BATTERIES 7
 #endif
 
 struct pylonBattery {
@@ -39,7 +39,15 @@ struct pylonBattery {
   bool isCharging()    const { return std::strcmp(baseState, "Charge")  == 0; }
   bool isDischarging() const { return std::strcmp(baseState, "Dischg")  == 0; }
   bool isIdle()        const { return std::strcmp(baseState, "Idle")    == 0; }
-  bool isBalancing()   const { return balancing || stateEquals("Balance"); }
+  bool isBalancing()   const {
+    return balancing ||
+           stateEquals("Balance") ||
+           stateEquals("Balancing") ||
+           std::strcmp(b_v_st, "Balance") == 0 ||
+           std::strcmp(b_v_st, "Balancing") == 0 ||
+           std::strcmp(b_t_st, "Balance") == 0 ||
+           std::strcmp(b_t_st, "Balancing") == 0;
+  }
   bool isProtect()     const { return stateEquals("Protect"); }
   bool isAlarm()       const { return stateEquals("Alarm") || stateEquals("Alarm!"); }
   bool hasAlarm()      const { return !isNormal() || isProtect() || isAlarm(); }

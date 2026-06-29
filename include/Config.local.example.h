@@ -37,6 +37,14 @@
 #define PIN_TX2       17
 #define DEFAULT_BAUD  115200
 
+// Pylontech-Konsole
+// Nach einem Batterie-Power-Off faellt die Konsole oft auf pylon> zurueck.
+// Die Firmware versucht dann automatisch wieder in pylon_debug> zu wechseln.
+#define PYLON_AUTO_DEBUG_LOGIN 1
+#define PYLON_DEBUG_LOGIN_CMD  "login debug"
+// Falls deine Batterie nach "login debug" ein Passwort verlangt:
+// #define PYLON_DEBUG_PASSWORD "YOUR_DEBUG_PASSWORD"
+
 // Firmware-Layout der Pylon-Ausgabe (1 oder 2)
 #ifndef FW_VERSION
 #define FW_VERSION    2
